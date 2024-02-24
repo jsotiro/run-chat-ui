@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  chat-ui:
+    image: chat-ui
+    environment:
+      CPU_CORES: "max"
+    ports:
+      - "80:3000"
+    depends_on:
+      - mongo_db
+  mongo_db:
+    image: mongo
+    ports:
+      - "27017:27017"
+
+networks:
+  default:
+    driver: bridge

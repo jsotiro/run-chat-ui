@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  chat-ui:
+    image: chat-ui
+    environment:
+      CPU_CORES: "max"
+    ports:
+      - "80:3000"
+    depends_on:
+      - mongo_db
+      - mistral_llm
+
+  mongo_db:
+    image: mongo
+    ports:
+      - "27017:27017"
+
+  mistral_llm:
+    image: ghcr.io/mistralai/mistral-src/vllm:latest
+    environment:
+      HF_TOKEN: "${HF_TOKEN}"
+    command: ["--host", "0.0.0.0", "--model", "mistralai/Mistral-7B-Instruct-v0.2"]
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              count: all
+networks:
+  default:
+    driver: bridge
