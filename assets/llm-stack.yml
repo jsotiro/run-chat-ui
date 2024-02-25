@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: EC2 Instance with secure access to SSM Parameter Store, KMS decryption, pulling latest Docker image from ECR, cloning GitHub repo, running Docker Compose, and setting environment variables from SSM Parameter Store based on Ubuntu AMI
+Parameters:
+  KeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  KmsKeyAlias:
+    Description: Alias name of the KMS key used to encrypt/decrypt parameters
+    Type: String
+    Default: alias/myDefaultKeyAlias
+  AmiId:
+    Description: AMI ID to use for the EC2 instance
+    Type: AWS::EC2::Image::Id
+
+Resources:
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AccessECRandSSMwithKMS
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - kms:Decrypt
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetAuthorizationToken
+                Resource: "*" 
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+        - arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - Ref: InstanceRole
+
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub ${AWS::StackName}-sg
+      GroupDescription: Security group for EC2 instance
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: g5.xlarge
+      ImageId: !Ref AmiId
+      KeyName: !Ref KeyName
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 512
+            VolumeType: gp3
+      Tags:
+        - Key: "Name"
+          Value: "LLM Instance"
+      SecurityGroups:
+        - Ref: SecurityGroup
+      IamInstanceProfile: !Ref InstanceProfile
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          export AWS_DEFAULT_REGION=${AWS::Region}
+          # Authenticate with ECR
+          $(aws ecr get-login --no-include-email --region ${AWS::Region})
+          # Clone the specified GitHub repository
+          git clone https://github.com/jsotiro/run-chat-ui.git
+          cd run-chat-ui
+          # Fetch SSM Parameters and set them as environment variables
+          export HF_TOKEN=$(aws ssm get-parameter --name "/secure-ai/HF_TOKEN" --with-decryption --query "Parameter.Value")
+          export LLM_ENDPOINT=$(aws ssm get-parameter --name "/secure-ai/LLM_ENDPOINT"  --query "Parameter.Value" --output text)"
+      
+          echo "export HF_TOKEN=$HF_TOKEN >> ~/.bashrc
+          echo "export LLM_ENDPOINT=$LLM_ENDPOINT" >> ~/.bashrc
+          
+          # Replace placeholders in Docker Compose template files
+          
+          sed -i "s/{{ACCOUNT_ID}}/${AWS::AccountId}/g" assets/docker-compose.yml
+          sed -i "s/{{ACCOUNT_ID}}/$${AWS::AccountId}/g" assets/docker-compose.remote.yml
+          sed -i "s/{{REGION}}/${AWS::Region}/g" assets/docker-compose.yml
+          sed -i "s/{{REGION}}/${AWS::Region}/g" assets/docker-compose.remote.yml
+          # Check LLM_ENDPOINT value and decide which docker-compose file to use
+          if [ "$LLM_ENDPOINT" == "http://mistral_llm:8000/v1" ]; then
+            docker-compose up -f assets/docker-compose.yml -d
+          else
+            docker-compose -f assets/docker-compose.remote.yml up -d
+          fi
+Outputs:
+  PublicDNS:
+    Description: Public DNSName of the newly created EC2 instance
+    Value: !GetAtt [EC2Instance, PublicDnsName]
+  PublicIP:
+    Description: Public IP address of the newly created EC2 instance
+    Value: !GetAtt [EC2Instance, PublicIp]

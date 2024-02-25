@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   chat-ui:
-    image: chat-ui
+    image: {{ACCOUNT_ID}}.dkr.ecr.{{REGION}}.amazonaws.com/chat-ui-repo:latest
     environment:
       CPU_CORES: "max"
     ports:
