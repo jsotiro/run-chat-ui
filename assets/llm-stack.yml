@@ -97,7 +97,7 @@ Resources:
           echo "export LLM_ENDPOINT=$LLM_ENDPOINT" >> /etc/profile
       
           # Fetch and export LLM_MODEL
-          LLM_ENDPOINT=$(aws ssm get-parameter --name "/secure-ai/LLM_MODEL" --query "Parameter.Value" --region ${AWS::Region} --output text)
+          LLM_MODEL=$(aws ssm get-parameter --name "/secure-ai/LLM_MODEL" --query "Parameter.Value" --region ${AWS::Region} --output text)
           export LLM_MODEL=$LLM_MODEL
           echo "export LLM_MODEL=$LLM_MODEL" >> /etc/profile
      

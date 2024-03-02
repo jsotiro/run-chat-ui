@@ -60,5 +60,18 @@ else
 fi
 
 # Describe the stack to get details
-echo "Describing the created stack..."
-aws cloudformation describe-stacks --stack-name $STACK_NAME --region $REGION
+echo "Retrieving details of the created stack..."
+STACK_DESCRIPTION=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --region $REGION)
+
+# Extract Public  DNS Name
+PUBLIC_DNS=$(echo $STACK_DESCRIPTION | jq -r '.Stacks[0].Outputs[] | select(.OutputKey == "PublicDNS") | .OutputValue')
+
+if [ -n "$PUBLIC_DNS" ]; then
+    echo "Stack created." 
+    echo "You can now SSH into the LLM instance with:"
+    echo "ssh -i ${KEY_NAME} ubuntu@${PUBLIC_DNS}"
+    echo "You can access the Chat UI and the LLM app on ports 8081 and 8000 using SSH tunneling with:"
+    echo "ssh -i ${KEY_NAME} -L 8081:localhost:80 -L 8000:localhost:8000 ubuntu@${PUBLIC_DNS}"
+else
+    echo "Public IP or DNS name not found."
+fi
