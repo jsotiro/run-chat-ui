@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   chat-ui:
     image: {{ACCOUNT_ID}}.dkr.ecr.{{REGION}}.amazonaws.com/chat-ui-repo:latest
@@ -9,18 +7,18 @@ services:
       - "80:3000"
     depends_on:
       - mongo_db
-      - mistral_llm
+      - llm_model
 
   mongo_db:
     image: mongo
     ports:
       - "27017:27017"
 
-  mistral_llm:
-    image: ghcr.io/mistralai/mistral-src/vllm:latest
+  llm_model:
+    image: vllm/vllm-openai
     environment:
       HF_TOKEN: "${HF_TOKEN}"
-    command: ["--host", "0.0.0.0", "--model", "mistralai/Mistral-7B-Instruct-v0.2"]
+    command: "--host 0.0.0.0 --model ${LLM_MODEL}"
     ports:
       - "8000:8000"
     deploy:

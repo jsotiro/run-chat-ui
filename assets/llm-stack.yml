@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: EC2 Instance with secure access to SSM Parameter Store, KMS decryption, pulling latest Docker image from ECR, cloning GitHub repo, running Docker Compose, and setting environment variables from SSM Parameter Store based on Ubuntu AMI
+Description: EC2 Instance for LLM with secure access to SSM Parameter Store, KMS decryption, pulling latest Docker image from ECR, cloning GitHub repo, running Docker Compose, and setting environment variables from SSM Parameter Store based on Ubuntu AMI
 Parameters:
   KeyName:
     Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
@@ -80,30 +80,62 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          export AWS_DEFAULT_REGION=${AWS::Region}
-          # Authenticate with ECR
-          $(aws ecr get-login --no-include-email --region ${AWS::Region})
+          # sudo apt update && sudo apt install docker-compose -y
+          sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/bin/docker-compose
+          sudo chmod +x /usr/bin/docker-compose
+          # create environment variables
+          echo "export AWS_DEFAULT_REGION=${AWS::Region}" >> /etc/profile
+          ACCOUNT_ID=$(aws sts get-caller-identity --query "Account" --output text)
+
+          HF_TOKEN=$(aws ssm get-parameter --name "/secure-ai/HF_TOKEN" --with-decryption --query "Parameter.Value" --region ${AWS::Region} --output text)
+          export HF_TOKEN=$HF_TOKEN
+          echo "export HF_TOKEN=$HF_TOKEN" >> /etc/profile
+      
+          # Fetch and export LLM_ENDPOINT
+          LLM_ENDPOINT=$(aws ssm get-parameter --name "/secure-ai/LLM_ENDPOINT" --query "Parameter.Value" --region ${AWS::Region} --output text)
+          export LLM_ENDPOINT=$LLM_ENDPOINT
+          echo "export LLM_ENDPOINT=$LLM_ENDPOINT" >> /etc/profile
+      
+          # Fetch and export LLM_MODEL
+          LLM_ENDPOINT=$(aws ssm get-parameter --name "/secure-ai/LLM_MODEL" --query "Parameter.Value" --region ${AWS::Region} --output text)
+          export LLM_MODEL=$LLM_MODEL
+          echo "export LLM_MODEL=$LLM_MODEL" >> /etc/profile
+     
+      
+      
+      
+          #display current user
+          echo $(whoami)
+          #display the env variables
+          echo $LLM_ENDPOINT
+          echo $LLM_MODEL
+          echo $HF_TOKEN
+
+
+          #echo "export HF_TOKEN=$(aws ssm get-parameter --name "/secure-ai/HF_TOKEN" --with-decryption --query "Parameter.Value" --region ${AWS::Region} --output text)" >> /etc/profile
+          #echo "export LLM_ENDPOINT=$(aws ssm get-parameter --name "/secure-ai/LLM_ENDPOINT" --query "Parameter.Value" --region ${AWS::Region} --output text)" >> /etc/profile
+          # Fetch SSM Parameters and set them as environment variables      
+          #echo "export HF_TOKEN=$(aws ssm get-parameter --name "/secure-ai/HF_TOKEN" --with-decryption --query "Parameter.Value" --region ${AWS::Region}  --output text)" >> /etc/profile
+          #echo "export LLM_ENDPOINT=$(aws ssm get-parameter --name "/secure-ai/LLM_ENDPOINT" --region ${AWS::Region}  --query "Parameter.Value" --output text)" >> /etc/profile
+
           # Clone the specified GitHub repository
+          cd /home/ubuntu
           git clone https://github.com/jsotiro/run-chat-ui.git
           cd run-chat-ui
-          # Fetch SSM Parameters and set them as environment variables
-          export HF_TOKEN=$(aws ssm get-parameter --name "/secure-ai/HF_TOKEN" --with-decryption --query "Parameter.Value")
-          export LLM_ENDPOINT=$(aws ssm get-parameter --name "/secure-ai/LLM_ENDPOINT"  --query "Parameter.Value" --output text)"
-      
-          echo "export HF_TOKEN=$HF_TOKEN >> ~/.bashrc
-          echo "export LLM_ENDPOINT=$LLM_ENDPOINT" >> ~/.bashrc
           
           # Replace placeholders in Docker Compose template files
-          
           sed -i "s/{{ACCOUNT_ID}}/${AWS::AccountId}/g" assets/docker-compose.yml
-          sed -i "s/{{ACCOUNT_ID}}/$${AWS::AccountId}/g" assets/docker-compose.remote.yml
+          sed -i "s/{{ACCOUNT_ID}}/${AWS::AccountId}/g" assets/docker-compose-remote.yml
           sed -i "s/{{REGION}}/${AWS::Region}/g" assets/docker-compose.yml
-          sed -i "s/{{REGION}}/${AWS::Region}/g" assets/docker-compose.remote.yml
+          sed -i "s/{{REGION}}/${AWS::Region}/g" assets/docker-compose-remote.yml
+
+          # Authenticate with ECR
+          aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin $ACCOUNT_ID.dkr.ecr.${AWS::Region}.amazonaws.com
           # Check LLM_ENDPOINT value and decide which docker-compose file to use
-          if [ "$LLM_ENDPOINT" == "http://mistral_llm:8000/v1" ]; then
-            docker-compose up -f assets/docker-compose.yml -d
+          if [ "$LLM_ENDPOINT" ==  "http://llm_model:8000/v1" ]; then
+            docker-compose -f assets/docker-compose.yml up -d
           else
-            docker-compose -f assets/docker-compose.remote.yml up -d
+            docker-compose -f assets/docker-compose-remote.yml up -d
           fi
 Outputs:
   PublicDNS:

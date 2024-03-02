@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   chat-ui:
     image: {{ACCOUNT_ID}}.dkr.ecr.{{REGION}}.amazonaws.com/chat-ui-repo:latest

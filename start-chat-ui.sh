@@ -22,8 +22,8 @@ echo ".env.local has been generated with the Mistral endpoint set to $MISTRAL_EN
 # Start the application with docker-compose based on the Mistral endpoint
 if [ "$USE_LOCAL_MISTRAL" = "true" ]; then
   echo "Starting with local Mistral LLM container..."
-  docker-compose up -d
+  docker-compose up -d -f assets/
 else
   echo "Starting with remote Mistral LLM..."
-  docker-compose -f docker-compose.remote.yml up -d
+  docker-compose -f assets/docker-compose.remote.yml up -d
 fi

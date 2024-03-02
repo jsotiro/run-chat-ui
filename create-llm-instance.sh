@@ -15,7 +15,7 @@ fi
 # Parameters
 KEY_NAME=$1
 KMS_KEY_ALIAS=$2
-STACK_NAME="MistralLLMStack"
+STACK_NAME="LLMStack"
 TEMPLATE_PATH="assets/llm-stack.yml" 
 
 # HF_TOKEN handling
